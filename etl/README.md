@@ -32,6 +32,19 @@ Each step is also runnable individually (`python 02_load_sales_actuals.py`,
 etc.) if you want to re-run just one stage. Order matters the first time —
 `03` needs stores loaded, `04` and `05` need `sales_actuals` loaded.
 
+## Data source: committed local copies (primary), GitHub mirror (fallback)
+
+`stores.csv`, `train.csv`, and `features.csv` are committed directly in
+`etl/data/` — this repo doesn't depend on the third-party GitHub mirror
+(`vicky60629/Walmart-Store-Sales-Forecasting`) staying online. `db.py`'s
+`local_or_remote()` helper checks `etl/data/` first and only falls back to
+the mirror URL if a file is missing there. `test.csv` from the original
+Kaggle competition is not included since the pipeline never reads it.
+
+If you ever need to regenerate `etl/data/` from scratch, the same mirror
+URLs used as the fallback (see `STORES_URL`, `TRAIN_URL`, `FEATURES_URL` in
+the respective scripts) are the source.
+
 ## What each step does
 
 | Script | What it loads | Source |

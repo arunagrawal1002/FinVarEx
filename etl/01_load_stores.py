@@ -11,7 +11,7 @@ Idempotent: safe to re-run (ON CONFLICT DO NOTHING on store_id).
 """
 import pandas as pd
 from psycopg2.extras import execute_values
-from db import get_connection
+from db import get_connection, local_or_remote
 
 STORES_URL = "https://raw.githubusercontent.com/vicky60629/Walmart-Store-Sales-Forecasting/master/data/stores.csv"
 
@@ -44,7 +44,7 @@ CITIES = [
 
 
 def main():
-    stores = pd.read_csv(STORES_URL)
+    stores = pd.read_csv(local_or_remote("stores.csv", STORES_URL))
     rows = []
     for i, r in stores.iterrows():
         lat, lon, region = CITIES[i % len(CITIES)]

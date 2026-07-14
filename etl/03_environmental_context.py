@@ -23,7 +23,7 @@ Idempotent: safe to re-run (ON CONFLICT DO NOTHING on store_id, week_date).
 import numpy as np
 import pandas as pd
 from psycopg2.extras import execute_values
-from db import get_connection
+from db import get_connection, local_or_remote
 
 FEATURES_URL = "https://raw.githubusercontent.com/vicky60629/Walmart-Store-Sales-Forecasting/master/data/features.csv"
 
@@ -44,7 +44,7 @@ def synthetic_national_series(dates):
 
 
 def main():
-    feats = pd.read_csv(FEATURES_URL)
+    feats = pd.read_csv(local_or_remote("features.csv", FEATURES_URL))
     feats["Date"] = pd.to_datetime(feats["Date"])
     md_cols = ["MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"]
     for c in md_cols:

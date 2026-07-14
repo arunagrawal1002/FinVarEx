@@ -11,13 +11,13 @@ Uses execute_values with page_size batching for fast bulk insert.
 """
 import pandas as pd
 from psycopg2.extras import execute_values
-from db import get_connection
+from db import get_connection, local_or_remote
 
 TRAIN_URL = "https://raw.githubusercontent.com/vicky60629/Walmart-Store-Sales-Forecasting/master/data/train.csv"
 
 
 def main():
-    train = pd.read_csv(TRAIN_URL)
+    train = pd.read_csv(local_or_remote("train.csv", TRAIN_URL))
     train["Date"] = pd.to_datetime(train["Date"]).dt.strftime("%Y-%m-%d")
 
     rows = [

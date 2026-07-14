@@ -15,6 +15,22 @@ import os
 import sys
 import psycopg2
 
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+
+
+def local_or_remote(filename: str, remote_url: str) -> str:
+    """
+    Prefer the committed copy in etl/data/ (source of truth, doesn't depend
+    on a third-party GitHub mirror staying online); fall back to the remote
+    URL if the local file isn't present for some reason.
+    """
+    local_path = os.path.join(DATA_DIR, filename)
+    if os.path.exists(local_path):
+        print(f"  ({filename}: reading local copy)")
+        return local_path
+    print(f"  ({filename}: local copy not found, falling back to {remote_url})")
+    return remote_url
+
 
 def get_connection():
     url = os.environ.get("DATABASE_URL")
