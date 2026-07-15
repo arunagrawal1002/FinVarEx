@@ -3,10 +3,19 @@
 import { useState, useTransition } from "react";
 import type { StoreOption, WeeklyActualRow } from "@/lib/queries";
 import type { VarianceBreakdown } from "@/lib/variance";
+import type { NarrativeResult } from "@/lib/narrative";
 import { TARGET_MONTHS } from "@/lib/reporting-window";
 import { validateInputForm, type FieldErrors } from "@/lib/validation";
-import { computeVariance, fetchDepts, fetchMonths, fetchWeeklyActuals, submitInput } from "./actions";
+import {
+  computeVariance,
+  fetchDepts,
+  fetchMonths,
+  fetchWeeklyActuals,
+  generateNarrativeForInput,
+  submitInput,
+} from "./actions";
 import VarianceBreakdownView from "./VarianceBreakdownView";
+import NarrativeView from "./NarrativeView";
 
 type MonthOption = { value: string; label: string };
 
@@ -28,11 +37,14 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
   const [confirmed, setConfirmed] = useState<null | { store_id: number; dept_id: number; target_month: string; weekCount: number }>(null);
   const [breakdown, setBreakdown] = useState<VarianceBreakdown | null>(null);
   const [breakdownError, setBreakdownError] = useState<string | null>(null);
+  const [narrative, setNarrative] = useState<NarrativeResult | null>(null);
+  const [narrativeError, setNarrativeError] = useState<string | null>(null);
   const [loadingDepts, startDeptsLoad] = useTransition();
   const [loadingMonths, startMonthsLoad] = useTransition();
   const [loadingWeeks, startWeeksLoad] = useTransition();
   const [submitting, startSubmit] = useTransition();
   const [computing, startCompute] = useTransition();
+  const [narrating, startNarrate] = useTransition();
 
   function resetDownstream(level: "store" | "dept" | "month") {
     if (level === "store") {
@@ -47,6 +59,8 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
     setConfirmed(null);
     setBreakdown(null);
     setBreakdownError(null);
+    setNarrative(null);
+    setNarrativeError(null);
   }
 
   function handleStoreChange(value: string) {
@@ -104,6 +118,8 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
     setConfirmed(null);
     setBreakdown(null);
     setBreakdownError(null);
+    setNarrative(null);
+    setNarrativeError(null);
 
     const payload = {
       store_id: storeId,
@@ -144,6 +160,19 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
           return;
         }
         setBreakdown(varianceResult.breakdown);
+
+        // Stage 5: only runs once Stage 4's numbers and classification
+        // are locked. The narrative layer never sees an unvalidated
+        // payload either -- generateNarrativeForInput re-validates and
+        // recomputes Stage 4 itself server-side (see actions.ts).
+        startNarrate(async () => {
+          const narrativeResult = await generateNarrativeForInput(payload);
+          if (!narrativeResult.success) {
+            setNarrativeError(narrativeResult.error);
+            return;
+          }
+          setNarrative(narrativeResult.result);
+        });
       });
     });
   }
@@ -339,6 +368,18 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
       )}
 
       {breakdown && !computing && <VarianceBreakdownView breakdown={breakdown} />}
+
+      {narrating && (
+        <p className="text-sm text-slate-500">Generating narrative (Stage 5)...</p>
+      )}
+
+      {narrativeError && (
+        <p className="text-sm text-red-600">Stage 5 error: {narrativeError}</p>
+      )}
+
+      {narrative && !narrating && breakdown && (
+        <NarrativeView result={narrative} baselineConfidence={breakdown.confidence_score} />
+      )}
     </form>
   );
 }
