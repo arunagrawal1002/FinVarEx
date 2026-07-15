@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from "react";
 import type { StoreOption, WeeklyActualRow } from "@/lib/queries";
+import type { VarianceBreakdown } from "@/lib/variance";
 import { TARGET_MONTHS } from "@/lib/reporting-window";
 import { validateInputForm, type FieldErrors } from "@/lib/validation";
-import { fetchDepts, fetchMonths, fetchWeeklyActuals, submitInput } from "./actions";
+import { computeVariance, fetchDepts, fetchMonths, fetchWeeklyActuals, submitInput } from "./actions";
+import VarianceBreakdownView from "./VarianceBreakdownView";
 
 type MonthOption = { value: string; label: string };
 
@@ -24,10 +26,13 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
 
   const [errors, setErrors] = useState<FieldErrors>({});
   const [confirmed, setConfirmed] = useState<null | { store_id: number; dept_id: number; target_month: string; weekCount: number }>(null);
+  const [breakdown, setBreakdown] = useState<VarianceBreakdown | null>(null);
+  const [breakdownError, setBreakdownError] = useState<string | null>(null);
   const [loadingDepts, startDeptsLoad] = useTransition();
   const [loadingMonths, startMonthsLoad] = useTransition();
   const [loadingWeeks, startWeeksLoad] = useTransition();
   const [submitting, startSubmit] = useTransition();
+  const [computing, startCompute] = useTransition();
 
   function resetDownstream(level: "store" | "dept" | "month") {
     if (level === "store") {
@@ -40,6 +45,8 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
     }
     setWeeklyActuals([]);
     setConfirmed(null);
+    setBreakdown(null);
+    setBreakdownError(null);
   }
 
   function handleStoreChange(value: string) {
@@ -95,6 +102,8 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setConfirmed(null);
+    setBreakdown(null);
+    setBreakdownError(null);
 
     const payload = {
       store_id: storeId,
@@ -124,6 +133,17 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
         dept_id: result.data.dept_id,
         target_month: result.data.target_month,
         weekCount: result.data.weekly_actuals.length,
+      });
+
+      // Stage 4: only runs once the input has cleared validation. The
+      // deterministic logic layer never sees an unvalidated payload.
+      startCompute(async () => {
+        const varianceResult = await computeVariance(payload);
+        if (!varianceResult.success) {
+          setBreakdownError(varianceResult.error);
+          return;
+        }
+        setBreakdown(varianceResult.breakdown);
       });
     });
   }
@@ -304,11 +324,21 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
             non-negative actuals passed both client- and server-side validation.
           </p>
           <p className="mt-2 text-emerald-700 text-xs">
-            This payload is ready to hand off to Stage 4 (deterministic logic layer). It is
+            This payload has been handed off to Stage 4 (deterministic logic layer) below. It is
             not persisted to <code>variance_reports</code> yet -- that wiring is Stage 6.
           </p>
         </div>
       )}
+
+      {computing && (
+        <p className="text-sm text-slate-500">Running deterministic variance calculation...</p>
+      )}
+
+      {breakdownError && (
+        <p className="text-sm text-red-600">Stage 4 error: {breakdownError}</p>
+      )}
+
+      {breakdown && !computing && <VarianceBreakdownView breakdown={breakdown} />}
     </form>
   );
 }

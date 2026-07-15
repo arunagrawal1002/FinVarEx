@@ -6,6 +6,7 @@ import {
   getWeeklyActuals,
 } from "@/lib/queries";
 import { validateInputForm, type FieldErrors, type InputFormPayload } from "@/lib/validation";
+import { computeVarianceBreakdown, type VarianceBreakdown } from "@/lib/variance";
 
 export async function fetchDepts(storeId: number) {
   return getDeptsForStore(storeId);
@@ -47,4 +48,39 @@ export async function submitInput(raw: unknown): Promise<SubmitResult> {
     return { success: false, errors: result.errors };
   }
   return { success: true, data: result.data };
+}
+
+export type ComputeVarianceResult =
+  | { success: true; breakdown: VarianceBreakdown }
+  | { success: false; error: string };
+
+/**
+ * Pipeline stage 4 (Deterministic Logic Layer), run server-side only.
+ *
+ * Deliberately re-validates the raw payload rather than trusting a caller
+ * to have already called submitInput -- the same "never trust the client"
+ * boundary applies here, since this is the function that locks the
+ * numbers and classification the LLM layer (Stage 5) will later narrate.
+ * If validation fails here, there is nothing safe to compute against.
+ */
+export async function computeVariance(raw: unknown): Promise<ComputeVarianceResult> {
+  const result = validateInputForm(raw);
+  if (!result.success) {
+    return { success: false, error: "Input failed validation; cannot compute variance." };
+  }
+
+  try {
+    const breakdown = await computeVarianceBreakdown({
+      store_id: result.data.store_id,
+      dept_id: result.data.dept_id,
+      target_month: result.data.target_month,
+      weekly_actuals: result.data.weekly_actuals,
+    });
+    return { success: true, breakdown };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to compute variance breakdown.",
+    };
+  }
 }
