@@ -16,12 +16,14 @@ Deployed on **Vercel** (not Replit — Replit's monthly credit + spending cap we
 - [x] Supabase project provisioned (`FinVarEx`, project ref `wmovmhilasvzcqvuzbvj`, region `us-east-1`)
 - [x] 7-table schema applied (stores, sales_actuals, sales_forecasts, weekly_environmental_context, competitor_intelligence, seasonal_index, variance_reports)
 - [x] Vercel deployment pipeline live (placeholder page)
-- [ ] ETL / seeding
-- [ ] Structured input form & validation
-- [ ] Deterministic logic layer
-- [ ] LLM integration
+- [x] ETL / seeding
+- [x] Structured input form & validation
+- [x] Deterministic logic layer
+- [x] LLM integration
 - [ ] Database persistence wiring
 - [ ] Frontend output + admin dashboard
+
+See `docs/SESSION_HANDOFF.md` for detailed current state and next steps.
 
 ## Git commit structure (minimum 6, required)
 
