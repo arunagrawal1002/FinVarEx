@@ -87,7 +87,9 @@ export default function VarianceBreakdownView({
           <div className="font-mono">{pct(d.yoy.pct)}</div>
         </div>
         <div>
-          <div className="text-xs text-slate-500">Seasonal expected %</div>
+          <div className="text-xs text-slate-500">
+            Seasonal expected % {d.seasonal.store_type ? `(type ${d.seasonal.store_type})` : ""}
+          </div>
           <div className="font-mono">{pct(d.seasonal.expected_pct)}</div>
         </div>
         <div>

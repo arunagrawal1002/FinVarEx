@@ -25,6 +25,25 @@ export type SeasonalIndexRow = {
   seasonal_index: number;
 };
 
+/**
+ * A store's format/size class (A/B/C -- an authentic field from the
+ * source data, not synthetic). Used to look up the right seasonal_index
+ * bucket -- see getSeasonalIndexForWeeks for why this matters more than
+ * region.
+ */
+export async function getStoreType(storeId: number): Promise<string | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("stores")
+    .select("type")
+    .eq("store_id", storeId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to load store type: ${error.message}`);
+
+  return (data as { type: string | null } | null)?.type ?? null;
+}
+
 /** Forecast baseline for the exact weeks under review (Stage 4 never
  *  fits or re-derives a forecast -- it only reads the offline SARIMAX
  *  output per the brief's "Speed vs. Accuracy" trade-off). */
@@ -120,17 +139,42 @@ export async function getCompetitorsForStore(storeId: number): Promise<Competito
   }));
 }
 
-/** Seasonal multipliers for this department, for the specific ISO weeks
- *  under review. */
+/**
+ * Seasonal multipliers for this department, scoped to the store's own
+ * format/size class (store_type), for the specific ISO weeks under
+ * review.
+ *
+ * seasonal_index is keyed on (dept_id, store_type, iso_week), not just
+ * (dept_id, iso_week) -- pooling across all 45 stores per department was
+ * validated to be a materially poor fit for many individual stores
+ * (within-dept store-vs-pooled-index correlation as low as 0.51, some
+ * stores near-zero or negative). store_type turned out to be the real,
+ * consistent driver of that heterogeneity (65/71 departments show
+ * same-type stores correlating higher than cross-type stores);
+ * region/climate was tested and ruled out, since stores.region_name is
+ * synthetic in this dataset. See supabase/migrations/
+ * 20260715120000_rekey_seasonal_index_by_store_type.sql for the full
+ * validation writeup.
+ *
+ * If storeType is null (shouldn't happen for a seeded store, but the
+ * `stores.type` column has no NOT NULL constraint), this returns an
+ * empty map -- the caller's missing_seasonal_index flag handles that
+ * gracefully rather than silently falling back to the old pooled
+ * behavior.
+ */
 export async function getSeasonalIndexForWeeks(
   deptId: number,
-  isoWeeks: number[]
+  isoWeeks: number[],
+  storeType: string | null
 ): Promise<Map<number, number>> {
+  if (!storeType) return new Map();
+
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from("seasonal_index")
     .select("iso_week, seasonal_index")
     .eq("dept_id", deptId)
+    .eq("store_type", storeType)
     .in("iso_week", isoWeeks);
 
   if (error) throw new Error(`Failed to load seasonal index: ${error.message}`);

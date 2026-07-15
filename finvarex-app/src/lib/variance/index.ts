@@ -30,6 +30,7 @@ import {
   getForecastsForWeeks,
   getPriorYearActuals,
   getSeasonalIndexForWeeks,
+  getStoreType,
 } from "./queries";
 import { monthEndDate } from "../reporting-window";
 import type { MathematicalDrivers, VarianceBreakdown, VarianceInput, WeeklyDriverRow } from "./types";
@@ -51,11 +52,14 @@ export async function computeVarianceBreakdown(
 
   // -- Fetch every input the calculation needs, in parallel. --
   const isoWeeks = weekDates.map(getISOWeek);
+  const storeType = await getStoreType(store_id);
+  if (!storeType) flags.push("missing_store_type");
+
   const [forecastMap, envMap, competitors, seasonalMap, priorYear] = await Promise.all([
     getForecastsForWeeks(store_id, dept_id, weekDates),
     getEnvironmentalContextForWeeks(store_id, weekDates),
     getCompetitorsForStore(store_id),
-    getSeasonalIndexForWeeks(dept_id, Array.from(new Set(isoWeeks))),
+    getSeasonalIndexForWeeks(dept_id, Array.from(new Set(isoWeeks)), storeType),
     getPriorYearActuals(store_id, dept_id, weekDates),
   ]);
 
@@ -226,6 +230,7 @@ export async function computeVarianceBreakdown(
       weeks_expected: weekDates.length,
     },
     seasonal: {
+      store_type: storeType,
       avg_index: avgSeasonalIndex !== null ? round(avgSeasonalIndex, 4) : null,
       expected_pct: seasonalExpectedPct,
       weeks_missing_index: missingIndexWeeks,

@@ -106,6 +106,7 @@ export type MathematicalDrivers = {
     weeks_expected: number;
   };
   seasonal: {
+    store_type: string | null;
     avg_index: number | null;
     expected_pct: number | null;
     weeks_missing_index: string[];
