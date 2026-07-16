@@ -20,8 +20,8 @@ Deployed on **Vercel** (not Replit — Replit's monthly credit + spending cap we
 - [x] Structured input form & validation
 - [x] Deterministic logic layer
 - [x] LLM integration
-- [ ] Database persistence wiring
-- [ ] Frontend output + admin dashboard
+- [x] Database persistence wiring
+- [x] Frontend output + admin dashboard
 
 See `docs/SESSION_HANDOFF.md` for detailed current state and next steps.
 
