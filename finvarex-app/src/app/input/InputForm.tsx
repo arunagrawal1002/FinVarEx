@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import type { StoreOption, WeeklyActualRow } from "@/lib/queries";
 import type { VarianceBreakdown } from "@/lib/variance";
 import type { NarrativeResult } from "@/lib/narrative";
@@ -39,6 +40,7 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
   const [breakdownError, setBreakdownError] = useState<string | null>(null);
   const [narrative, setNarrative] = useState<NarrativeResult | null>(null);
   const [narrativeError, setNarrativeError] = useState<string | null>(null);
+  const [reportId, setReportId] = useState<number | null>(null);
   const [loadingDepts, startDeptsLoad] = useTransition();
   const [loadingMonths, startMonthsLoad] = useTransition();
   const [loadingWeeks, startWeeksLoad] = useTransition();
@@ -61,6 +63,7 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
     setBreakdownError(null);
     setNarrative(null);
     setNarrativeError(null);
+    setReportId(null);
   }
 
   function handleStoreChange(value: string) {
@@ -120,6 +123,7 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
     setBreakdownError(null);
     setNarrative(null);
     setNarrativeError(null);
+    setReportId(null);
 
     const payload = {
       store_id: storeId,
@@ -172,6 +176,7 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
             return;
           }
           setNarrative(narrativeResult.result);
+          setReportId(narrativeResult.reportId);
         });
       });
     });
@@ -353,8 +358,9 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
             non-negative actuals passed both client- and server-side validation.
           </p>
           <p className="mt-2 text-emerald-700 text-xs">
-            This payload has been handed off to Stage 4 (deterministic logic layer) below. It is
-            not persisted to <code>variance_reports</code> yet -- that wiring is Stage 6.
+            This payload has been handed off to Stage 4 (deterministic logic layer) below. Once
+            Stage 5&apos;s narrative is generated, it is persisted to <code>variance_reports</code>{" "}
+            automatically.
           </p>
         </div>
       )}
@@ -379,6 +385,24 @@ export default function InputForm({ stores }: { stores: StoreOption[] }) {
 
       {narrative && !narrating && breakdown && (
         <NarrativeView result={narrative} baselineConfidence={breakdown.confidence_score} />
+      )}
+
+      {narrative && !narrating && (
+        <p className="text-sm">
+          {reportId !== null ? (
+            <>
+              ✓ Saved as report #{reportId}.{" "}
+              <Link href={`/reports/${reportId}`} className="font-semibold text-slate-900 hover:underline">
+                View in reports dashboard →
+              </Link>
+            </>
+          ) : (
+            <span className="text-amber-700">
+              ⚠ The narrative generated, but the audit write to <code>variance_reports</code> failed
+              -- see server logs. The analyst-facing result above is unaffected.
+            </span>
+          )}
+        </p>
       )}
     </form>
   );

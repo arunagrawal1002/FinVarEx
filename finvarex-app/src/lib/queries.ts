@@ -5,6 +5,7 @@ import {
   TARGET_MONTHS,
   monthEndDate,
 } from "./reporting-window";
+import type { Classification, MathematicalDrivers, RubricBucket } from "./variance";
 
 export type StoreOption = {
   store_id: number;
@@ -111,4 +112,89 @@ export async function getWeeklyActuals(
     actual_sales: Number(r.actual_sales),
     is_holiday: Boolean(r.is_holiday),
   }));
+}
+
+/**
+ * Stage 7 -- Frontend output / admin dashboard.
+ *
+ * A row from `variance_reports` as persisted by persistVarianceReport
+ * (src/lib/persist-report.ts). Note `confidence_score` here is the FINAL,
+ * post-narrative-validation score (Stage 5's output), not Stage 4's
+ * baseline -- the two are only both in memory in the live input-form flow
+ * (see InputForm.tsx passing breakdown.confidence_score as
+ * baselineConfidence); once persisted, only the final number survives.
+ * Dashboard views built against this type should not claim to show a
+ * "Stage 4 baseline" confidence, since that number isn't stored.
+ */
+export type VarianceReportRow = {
+  id: number;
+  store_id: number;
+  dept_id: number;
+  target_month: string;
+  generated_at: string;
+  mathematical_drivers: MathematicalDrivers;
+  classification: Classification;
+  rubric_bucket: RubricBucket;
+  ai_explanation: string | null;
+  confidence_score: number | null;
+  system_flags: string[];
+};
+
+/**
+ * Coarse severity ranking for the "risk-ranked" dashboard sort -- higher
+ * means more analyst attention-worthy. Deliberately a judgment call (the
+ * brief doesn't rank the 8 classifications against each other), scoped to
+ * "true Anomaly first, then externally-caused misses, then routine
+ * misses, then On Track last."
+ */
+const CLASSIFICATION_RISK_WEIGHT: Record<Classification, number> = {
+  Anomaly: 6,
+  "Force Majeure": 5,
+  "Competitive Pressure": 5,
+  "Weather Anomaly": 4,
+  Volume: 3,
+  Price: 3,
+  Timing: 3,
+  "On Track": 0,
+};
+
+export function classificationRiskWeight(classification: Classification): number {
+  return CLASSIFICATION_RISK_WEIGHT[classification] ?? 0;
+}
+
+/**
+ * Recent variance_reports rows for the dashboard. Fetches ordered by
+ * recency and bounded by `limit` -- filtering/re-sorting (risk vs.
+ * recent, classification filter) happens in the page component rather
+ * than in SQL, matching this file's existing pattern of doing set
+ * logic in JS after a plain Supabase read (see getDeptsForStore,
+ * getAvailableMonths) rather than reaching for raw SQL/RPCs.
+ */
+export async function getRecentReports(limit = 200): Promise<VarianceReportRow[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("variance_reports")
+    .select(
+      "id, store_id, dept_id, target_month, generated_at, mathematical_drivers, classification, rubric_bucket, ai_explanation, confidence_score, system_flags"
+    )
+    .order("generated_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(`Failed to load variance reports: ${error.message}`);
+  return (data ?? []) as unknown as VarianceReportRow[];
+}
+
+/** A single variance_reports row for the detail page, or null if not found. */
+export async function getReportById(id: number): Promise<VarianceReportRow | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("variance_reports")
+    .select(
+      "id, store_id, dept_id, target_month, generated_at, mathematical_drivers, classification, rubric_bucket, ai_explanation, confidence_score, system_flags"
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to load variance report ${id}: ${error.message}`);
+  return (data ?? null) as unknown as VarianceReportRow | null;
 }

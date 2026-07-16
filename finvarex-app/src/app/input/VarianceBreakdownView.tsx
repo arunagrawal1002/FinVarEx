@@ -35,8 +35,23 @@ const CLASSIFICATION_STYLES: Record<string, string> = {
  */
 export default function VarianceBreakdownView({
   breakdown,
+  confidenceLabel = "Stage 4 baseline",
+  footerNote = "This is Stage 4's locked, structured output -- no narrative has been generated. " +
+    "The confidence score above is the deterministic baseline only; Stage 5 will apply " +
+    "further deductions once the LLM narrative exists and is checked against this data.",
 }: {
   breakdown: VarianceBreakdown;
+  /**
+   * What the confidence badge in the header should call the number it's
+   * showing. Defaults to the live input-form flow's meaning (Stage 4's
+   * pre-narrative baseline). The reports dashboard passes a different
+   * label because a persisted variance_reports row only stores the
+   * final, post-narrative confidence_score -- see
+   * app/reports/PersistedNarrativeView.tsx for why.
+   */
+  confidenceLabel?: string;
+  /** Footer caption under the weekly table; overridable for the same reason as confidenceLabel. */
+  footerNote?: string;
 }) {
   const { mathematical_drivers: d, classification, rubric_bucket, confidence_score, system_flags } =
     breakdown;
@@ -55,7 +70,7 @@ export default function VarianceBreakdownView({
           rubric_bucket: <span className="font-mono">{rubric_bucket ?? "null"}</span>
         </span>
         <span className="text-xs text-slate-500 ml-auto">
-          confidence (Stage 4 baseline):{" "}
+          confidence ({confidenceLabel}):{" "}
           <span className="font-semibold text-slate-800">{confidence_score}</span>/100
         </span>
       </div>
@@ -187,9 +202,7 @@ export default function VarianceBreakdownView({
       )}
 
       <p className="text-[11px] text-slate-400 border-t border-slate-100 pt-2">
-        This is Stage 4&apos;s locked, structured output -- no narrative has been generated.
-        The confidence score above is the deterministic baseline only; Stage 5 will apply
-        further deductions once the LLM narrative exists and is checked against this data.
+        {footerNote}
       </p>
     </div>
   );

@@ -6,10 +6,10 @@ const STATUS: { label: string; done: boolean }[] = [
   { label: "GitHub repo + Vercel deployment pipeline live", done: true },
   { label: "ETL / seeding (421,570 real sales rows, full fidelity)", done: true },
   { label: "Structured input form & validation", done: true },
-  { label: "Deterministic logic layer", done: false },
-  { label: "LLM integration", done: false },
-  { label: "Database persistence wiring", done: false },
-  { label: "Frontend output + admin dashboard", done: false },
+  { label: "Deterministic logic layer", done: true },
+  { label: "LLM integration", done: true },
+  { label: "Database persistence wiring", done: true },
+  { label: "Frontend output + admin dashboard", done: true },
 ];
 
 export default function Home() {
@@ -42,12 +42,18 @@ export default function Home() {
           ))}
         </ul>
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex flex-wrap gap-3 pt-2">
           <Link
             href="/input"
             className="rounded-lg bg-slate-900 text-white text-sm font-semibold px-5 py-2.5 hover:bg-slate-700"
           >
             Open structured input form
+          </Link>
+          <Link
+            href="/reports"
+            className="rounded-lg border border-slate-300 text-sm font-semibold px-5 py-2.5 hover:bg-slate-100"
+          >
+            Reports dashboard
           </Link>
           <a
             href="https://github.com/arunagrawal1002/FinVarEx"
