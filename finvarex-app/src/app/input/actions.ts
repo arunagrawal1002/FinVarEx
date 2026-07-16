@@ -8,6 +8,7 @@ import {
 import { validateInputForm, type FieldErrors, type InputFormPayload } from "@/lib/validation";
 import { computeVarianceBreakdown, type VarianceBreakdown } from "@/lib/variance";
 import { generateNarrative, type NarrativeResult } from "@/lib/narrative";
+import { persistVarianceReport } from "@/lib/persist-report";
 
 export async function fetchDepts(storeId: number) {
   return getDeptsForStore(storeId);
@@ -87,7 +88,7 @@ export async function computeVariance(raw: unknown): Promise<ComputeVarianceResu
 }
 
 export type GenerateNarrativeResult =
-  | { success: true; result: NarrativeResult }
+  | { success: true; result: NarrativeResult; reportId: number | null }
   | { success: false; error: string };
 
 /**
@@ -101,6 +102,15 @@ export type GenerateNarrativeResult =
  * against; accepting a client-supplied breakdown would let a tampered
  * payload feed both the prompt and its own grading, defeating the whole
  * point of locking the facts before the model is called.
+ *
+ * Also does Stage 6's job (Database persistence): once the narrative is
+ * generated, the validated input, the locked Stage 4 math, and the Stage 5
+ * narrative are written to variance_reports as one audit record (see
+ * src/lib/persist-report.ts). A persistence failure is logged but does not
+ * fail the request -- the analyst still gets the narrative they're waiting
+ * on in the room; a missing audit row is a real problem to go investigate,
+ * but it shouldn't block the live result. `reportId` is null when the
+ * insert failed, so callers can tell the two cases apart if they need to.
  */
 export async function generateNarrativeForInput(raw: unknown): Promise<GenerateNarrativeResult> {
   const result = validateInputForm(raw);
@@ -119,7 +129,16 @@ export async function generateNarrativeForInput(raw: unknown): Promise<GenerateN
       breakdown,
       analystNotes: result.data.analyst_notes,
     });
-    return { success: true, result: narrativeResult };
+
+    let reportId: number | null = null;
+    try {
+      const saved = await persistVarianceReport(result.data, breakdown, narrativeResult);
+      reportId = saved.id;
+    } catch (persistErr) {
+      console.error("Failed to persist variance report:", persistErr);
+    }
+
+    return { success: true, result: narrativeResult, reportId };
   } catch (err) {
     return {
       success: false,
