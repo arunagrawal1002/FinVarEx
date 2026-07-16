@@ -1,12 +1,15 @@
 # FinVarEx — Session Handoff
 
-Last updated: 2026-07-15. Written for whoever (or whichever Claude session) picks this up next.
+Last updated: 2026-07-16. Written for whoever (or whichever Claude session)
+picks this up next.
 
 ## Where things stand
 
-Stages 1-5 of the roadmap are built, committed, and pushed to `main`
-(https://github.com/arunagrawal1002/FinVarEx). Latest commit on main:
-`004c2b2 Add Stage 5 narrative layer, adversarial regex fix, seasonal_index store-type migration`.
+Stages 1-6 of the roadmap are built, committed, pushed to `main`
+(https://github.com/arunagrawal1002/FinVarEx), and deployed. Latest commit on
+main: `099c31e feat: configure database persistence models`. Confirmed live
+on Vercel (deployment `dpl_C8S1EZ6dZjQjNts9E93iNsHd1Co9`, state `READY`,
+built from `099c31e`).
 
 | Stage | What it is | Status |
 |---|---|---|
@@ -15,12 +18,11 @@ Stages 1-5 of the roadmap are built, committed, and pushed to `main`
 | 3 | Structured input form + Zod validation | Done |
 | 4 | Deterministic logic layer (variance math, classification) | Done |
 | 5 | LLM narrative layer (prompt boundary + post-hoc validation) | Done |
-| 6 | Database persistence (`variance_reports` table) | **Not started — next up** |
-| 7 | Frontend output + admin dashboard | Not started |
+| 6 | Database persistence (`variance_reports` table) | Done |
+| 7 | Frontend output + admin dashboard | **Not started — next up** |
 
 Production: https://finvarex.vercel.app (Vercel project `finvarex`, team `waypoint5`,
-redeployed via Vercel MCP on each push — git auto-deploy is wired up, pushes to `main`
-deploy automatically).
+git auto-deploy wired up — pushes to `main` deploy automatically).
 
 Local dev: works. `npm run dev` from `finvarex-app/` runs clean now (see "Known
 issues fixed" below if it breaks again on a fresh machine).
@@ -34,54 +36,61 @@ index, competitor impact, YoY — and locks them before any LLM sees them. Stage
 (`src/lib/narrative/`) only narrates those locked facts; it never computes
 anything, and its output is independently re-checked afterward
 (`src/lib/narrative/validate.ts`) rather than trusted just because the prompt
-told it to behave. Every Server Action re-validates raw input server-side with
-Zod (`src/lib/validation.ts`) — the client-side validation is UX only, not a
-trust boundary.
+told it to behave. Stage 6 (`src/lib/persist-report.ts`) writes the locked
+Stage 4 math and the Stage 5 narrative to `variance_reports` as one audit
+record, inside `generateNarrativeForInput` (`src/app/input/actions.ts`), once
+the narrative is generated. Every Server Action re-validates raw input
+server-side with Zod (`src/lib/validation.ts`) — the client-side validation is
+UX only, not a trust boundary.
 
-## What's next: Stage 6 (database persistence)
+## What's next: Stage 7 (frontend output + admin dashboard)
 
-The `variance_reports` table already exists (migration
-`20260714140651_create_varex_core_schema.sql`):
+No design work done on this yet. It's a page (or pages) to browse past
+`variance_reports` rows — the assignment's "admin dashboard / output panel."
 
-```sql
-CREATE TABLE variance_reports (
-    id                   BIGSERIAL PRIMARY KEY,
-    store_id             INT REFERENCES stores(store_id),
-    dept_id              INT,
-    target_month         DATE,
-    generated_at         TIMESTAMP DEFAULT NOW(),
-    input_snapshot       JSONB,
-    mathematical_drivers JSONB,
-    classification       VARCHAR(30) CHECK (...),
-    rubric_bucket        VARCHAR(20) CHECK (...),
-    ai_explanation       TEXT,
-    confidence_score     INT CHECK (confidence_score BETWEEN 0 AND 100),
-    system_flags         TEXT[]
-);
-```
+Useful starting points:
 
-Nothing writes to it yet. The Stage 4 output (`VarianceBreakdown` from
-`src/lib/variance/index.ts`) and Stage 5 output (`NarrativeResult` from
-`src/lib/narrative/index.ts`) are both fully shaped to match this table almost
-1:1 — `mathematical_drivers` maps straight to `breakdown.mathematical_drivers`,
-`classification`/`rubric_bucket`/`confidence_score`/`system_flags` already
-exist on the breakdown/narrative objects, `ai_explanation` is
-`narrativeResult.narrative`.
+- `generateNarrativeForInput` now returns `reportId: number | null` (the
+  `variance_reports.id` just written, or `null` if the write failed) — Stage 7
+  can use this to link the input-form flow straight to the persisted row, or
+  show a "saved" confirmation.
+- There's no read/list query for `variance_reports` yet. Follow the existing
+  pattern in `src/lib/queries.ts` (server-only Supabase client, throw with a
+  descriptive prefix on `error`) to add something like `getRecentReports()` /
+  `getReportById()`.
+- Worth deciding: a flat list of recent reports vs. something closer to the
+  brief's "Portfolio Anomaly Queue" concept (Section 04 of the product brief)
+  — i.e. surfacing reports by classification/confidence rather than just
+  recency. Not decided yet; the brief treats the Anomaly Queue as a
+  high-value/high-effort core investment, not a fill-in.
 
-Suggested approach: add a Server Action (or extend
-`generateNarrativeForInput` in `src/app/input/actions.ts`) that inserts a row
-after the narrative is generated, using the existing server-only Supabase
-client pattern in `src/lib/supabase-server.ts` (service-role key, never
-exposed to the client). `input_snapshot` should store the raw validated form
-input for audit/reproducibility. Use the server-role client, not the anon
-key — RLS is enabled on all 7 tables with zero policies
-(`20260714192300_enable_rls_no_policies.sql`), so the anon key can't write
-anything; only the service-role client (server-side only) can.
+## Stage 6 summary (completed this session, 2026-07-16)
 
-After that: Stage 7, a page to browse past `variance_reports` rows (admin
-dashboard / output panel) — no design work done on this yet.
+Added `src/lib/persist-report.ts` (`persistVarianceReport`) and wired it into
+`generateNarrativeForInput`. Maps `mathematical_drivers` /`classification` /
+`rubric_bucket` straight from the Stage 4 breakdown, `ai_explanation` /
+`confidence_score` / `system_flags` from the Stage 5 narrative result, and
+`input_snapshot` from the validated raw form payload. Uses the service-role
+client (`src/lib/supabase-server.ts`) since RLS has zero policies on this
+table. A persistence failure is logged but doesn't fail the request — the
+analyst still gets their narrative even if the audit write fails.
 
-## Known issues fixed this session (don't re-diagnose these)
+Verification approach (the sandbox this was built in can't reach Supabase or
+Anthropic directly over HTTP — only through their dedicated MCP integrations,
+confirmed via a 403 from an egress proxy on a direct `curl`) — so instead of a
+full browser click-through:
+- `tsc --noEmit` and `eslint` both clean.
+- A live schema-conformance test via the Supabase MCP: inserted a payload
+  shaped exactly like what `persistVarianceReport` sends, confirmed it's
+  accepted, confirmed the `classification` CHECK constraint genuinely rejects
+  invalid values (not silently disabled), then deleted the test row.
+
+**Not yet done: a real end-to-end browser test.** Worth running `npm run dev`
+locally, submitting one form, and confirming a row actually lands in
+`variance_reports` — this session only proved the code compiles and the
+schema accepts the shape, not that the full click-through works.
+
+## Known issues fixed (don't re-diagnose these)
 
 - **Local npm install crashed with `TypeError: Invalid Version:`** on Windows
   (npm 11.16.0 / Node 25.6.0), reproducible even with a fully fresh cache —
@@ -103,7 +112,9 @@ dashboard / output panel) — no design work done on this yet.
   `(dept_id, store_type, iso_week)` — see migration
   `20260715120000_rekey_seasonal_index_by_store_type.sql` and the rewritten
   `etl/04_seasonal_index.py`. Verified live: two stores of different types in
-  the same dept now produce different seasonal-adjustment values.
+  the same dept now produce different seasonal-adjustment values. (This
+  finding is now also logged in the product brief's Retrospective section,
+  `docs/VarEx_Product_Brief.pdf`, Section 08.)
 - **Forbidden-topic regexes in `validate.ts` only matched exact singular
   keywords** — "storms" (plural) slipped past the weather-topic detector
   undetected, found via an adversarial test
@@ -111,54 +122,23 @@ dashboard / output panel) — no design work done on this yet.
   scripts/adversarial-narrative-test.ts`). Fixed by widening patterns to
   `word\w*` stems. All 7 adversarial/control cases pass now — rerun that
   script any time `validate.ts` changes.
-
-## Environment / secrets
-
-- Supabase project `FinVarEx`, ref `wmovmhilasvzcqvuzbvj`, region `us-east-1`.
-  URL and service-role key are in `finvarex-app/.env.local` (gitignored) and
-  set in Vercel env vars.
-- `ANTHROPIC_API_KEY` is set in both `.env.local` and Vercel. Model in use:
-  `claude-haiku-4-5-20251001` (chosen for cost — see
-  `src/lib/narrative/constants.ts` to change it).
-- `.env.example` documents all required vars without real values — keep it in
-  sync if you add new env vars.
-
-## A loose end, not yet decided
-
-Early this session we validated that `seasonal_index` should be keyed by
-store type, not region (region data in this dataset is synthetic and has no
-real causal effect — confirmed via correlation analysis). I offered to add a
-line documenting this finding to the product brief's Retrospective section;
-that offer was never taken up. Worth doing at some point for the writeup, low
-priority relative to Stage 6/7.
-
-## Required commit structure (from root README)
-
-The assignment wants a minimum of 6 commits following a specific structure.
-Actual history so far (`git log --oneline`):
-
-```
-004c2b2 Add Stage 5 narrative layer, adversarial regex fix, seasonal_index store-type migration
-f4f1f9c fix: money validation rejected ~32% of valid two-decimal dollar amounts (float precision)
-d327917 fix: re-key seasonal_index by store type, not pooled across all stores
-2dc9789 feat: build deterministic logic layer calculations
-02add78 Add example environment variables for Supabase
-71031ca Exclude .env.example from .gitignore
-28f2562 feat: implement structured data input form and validation
-4de4e69 Vendor raw Kaggle CSVs into etl/data/, add local_or_remote fallback
-294e6e4 feat: add Supabase schema migrations
-e2dcddb docs: add product brief documentation
-```
-
-This satisfies the required categories (docs, input form, logic layer, LLM
-integration) plus extra fix commits, which is fine — the rubric asks for a
-minimum, not an exact match. Stage 6 (`feat: configure database persistence
-models`) and Stage 7 (`feat: design visual output panels and admin
-dashboard`) commit messages are still needed to fully match the suggested
-structure in the root README.
-
-## Root README status checklist is stale
-
-`README.md` at the repo root still shows ETL, input form, logic layer, and
-LLM integration as unchecked `[ ]` boxes — they're actually done. Worth
-updating alongside the Stage 6 commit so the README reflects reality.
+- **`finvarex-app/` had no `.gitattributes`**, so files edited on Windows kept
+  coming back with CRLF line endings against an LF-committed history — every
+  line of a touched file showed as "changed" with zero real content diff.
+  Confirmed via `git diff --ignore-all-space` (empty) before discarding
+  anything. Fixed by adding `finvarex-app/.gitattributes` (`* text=auto
+  eol=lf`) and re-checking out the affected files. If a Windows editor touches
+  these files again, git should now normalize automatically instead of
+  showing whole-file noise.
+- **`supabase-js`'s `.insert()` typing resolves to `never`** on this project
+  because there's no generated Database schema type (`supabase gen types`
+  was never run). Reads already work around the same gap by casting results
+  with `as unknown as X` (see `src/lib/queries.ts`); `.insert()` needed an
+  explicit `as any` + `eslint-disable-next-line @typescript-eslint/no-explicit-any`
+  at the query-builder boundary instead (see `src/lib/persist-report.ts`).
+  Generating real types (`generate_typescript_types` via the Supabase MCP, or
+  `supabase gen types typescript`) would remove the need for this if it
+  becomes worth the churn.
+- **Sandbox-specific, not relevant to Arun's own machine:** when this repo is
+  accessed from an AI agent's sandboxed shell (mounted, not the real
+  filesystem), two quirks showed up and
